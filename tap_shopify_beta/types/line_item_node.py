@@ -53,7 +53,8 @@ class LineItemNodeType(th.ObjectType):
             th.Property("unfulfilledOriginalTotalSet", MoneyBagType()),
             th.Property("unfulfilledQuantity", th.IntegerType),
             th.Property("variant", th.ObjectType(
-                th.Property("id", th.StringType)
+                th.Property("id", th.StringType),
+                th.Property("legacyResourceId", th.StringType)
             )),
             th.Property("variantTitle", th.StringType),
             th.Property("vendor", th.StringType),
