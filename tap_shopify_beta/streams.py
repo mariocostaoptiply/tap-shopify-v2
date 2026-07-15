@@ -3,7 +3,7 @@ import abc
 from backports.cached_property import cached_property
 import json
 import sys
-from typing import Dict, Iterable, Optional, List, Any
+from typing import Dict, Iterable, Optional, List, Any, Set
 from hotglue_singer_sdk.helpers.jsonpath import extract_jsonpath
 
 from hotglue_singer_sdk import typing as th
@@ -43,8 +43,11 @@ for i, arg in enumerate(sys.argv):
             config_path = sys.argv[i + 1]
         break
 
-with open(config_path, "r") as jsonfile:
-    data = json.load(jsonfile)
+try:
+    with open(config_path, "r") as jsonfile:
+        data = json.load(jsonfile)
+except FileNotFoundError:
+    data = {}
 
 stream_condition = data.get("bulk", False)
 class DynamicStream(shopifyBulkStream if stream_condition else shopifyGqlStream):
@@ -401,6 +404,8 @@ class OrdersStream(DynamicStream):
         th.Property("unpaid", th.BooleanType),
         th.Property("updatedAt", th.DateTimeType),
         th.Property("sourceIdentifier", th.StringType),
+        th.Property("sourceName", th.StringType),
+        th.Property("retailLocation", LocationType()),
         th.Property("lineItems", th.ArrayType(LineItemNodeType())),
         th.Property("metafields", th.ArrayType(th.ObjectType(
             th.Property("id", th.StringType),
@@ -977,6 +982,17 @@ class LocationsStream(shopifyRestStream):
         th.Property("localized_country_name", th.StringType),
         th.Property("localized_province_name", th.StringType),
     ).to_dict()
+
+    def _configured_location_ids(self) -> Set[str]:
+        location_ids = self.config.get("location_ids") or []
+        return {str(location_id) for location_id in location_ids if str(location_id)}
+
+    def post_process(self, row: dict, context: Optional[dict] = None):
+        """Filter locations before child inventory streams are traversed."""
+        location_ids = self._configured_location_ids()
+        if location_ids and str(row.get("id")) not in location_ids:
+            return None
+        return row
 
     def get_child_context(self, record: dict, context: Optional[dict]) -> dict:
         """Return a context dictionary for child streams."""

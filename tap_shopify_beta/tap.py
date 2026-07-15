@@ -78,6 +78,12 @@ class TapshopifyBeta(Tap):
             th.DateTimeType,
             description="The latest record date to sync (inclusive)",
         ),
+        th.Property(
+            "location_ids",
+            th.ArrayType(th.StringType),
+            required=False,
+            description="Optional Shopify location IDs to sync inventory levels for",
+        ),
     ).to_dict()
 
     def discover_streams(self) -> List[Stream]:

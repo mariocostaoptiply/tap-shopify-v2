@@ -4,11 +4,12 @@ import datetime
 
 from hotglue_singer_sdk.testing import get_standard_tap_tests
 
+from tap_shopify_beta.streams import LocationsStream, OrdersStream
 from tap_shopify_beta.tap import TapshopifyBeta
 
 SAMPLE_CONFIG = {
-    "start_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d")
-    # TODO: Initialize minimal tap config
+    "shop": "dummy-shop",
+    "start_date": datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d"),
 }
 
 
@@ -19,8 +20,57 @@ def test_standard_tap_tests():
         TapshopifyBeta,
         config=SAMPLE_CONFIG
     )
+    # Exclude SDK connection test: unit suite must not perform live Shopify calls.
+    excluded_test_names = {"_test_stream_connections"}
     for test in tests:
+        if test.__name__ in excluded_test_names:
+            continue
         test()
 
 
-# TODO: Create additional tests as appropriate for your tap.
+def test_orders_schema_exposes_pos_source_and_retail_location():
+    properties = OrdersStream.schema["properties"]
+
+    assert properties["sourceIdentifier"]["type"] == ["string", "null"]
+    assert properties["sourceName"]["type"] == ["string", "null"]
+    assert properties["retailLocation"]["type"] == ["object", "null"]
+    assert properties["retailLocation"]["properties"]["id"]["type"] == ["string", "null"]
+    assert properties["retailLocation"]["properties"]["name"]["type"] == ["string", "null"]
+
+
+def test_config_schema_exposes_optional_location_ids_string_array():
+    location_ids = TapshopifyBeta.config_jsonschema["properties"]["location_ids"]
+
+    assert location_ids["type"] == ["array", "null"]
+    assert location_ids["items"]["type"] == ["string"]
+    assert "location_ids" not in TapshopifyBeta.config_jsonschema.get("required", [])
+
+
+def _locations_stream(location_ids=None):
+    config = dict(SAMPLE_CONFIG)
+    if location_ids is not None:
+        config["location_ids"] = location_ids
+    return LocationsStream(tap=TapshopifyBeta(config=config))
+
+
+def test_locations_post_process_keeps_matching_string_location_id():
+    stream = _locations_stream(["123"])
+    record = {"id": 123, "name": "POS"}
+
+    assert stream.post_process(record) == record
+
+
+def test_locations_post_process_filters_non_matching_location_id():
+    stream = _locations_stream(["123"])
+
+    assert stream.post_process({"id": 456, "name": "Other"}) is None
+
+
+def test_locations_post_process_preserves_all_locations_when_unset_or_empty():
+    record = {"id": 456, "name": "Other"}
+
+    stream = _locations_stream()
+    assert stream.post_process(record) == record
+
+    stream = _locations_stream([])
+    assert stream.post_process(record) == record
