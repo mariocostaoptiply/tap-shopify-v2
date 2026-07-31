@@ -38,6 +38,19 @@ def test_orders_schema_exposes_pos_source_and_retail_location():
     assert properties["retailLocation"]["properties"]["name"]["type"] == ["string", "null"]
 
 
+def test_order_line_variant_schema_exposes_legacy_resource_id():
+    line_items = OrdersStream.schema["properties"]["lineItems"]["items"]["properties"]
+    variant = line_items["variant"]["properties"]
+
+    assert variant["id"]["type"] == ["string", "null"]
+    assert variant["legacyResourceId"]["type"] == ["string", "null"]
+
+    stream = OrdersStream(tap=TapshopifyBeta(config=SAMPLE_CONFIG))
+    query = stream.get_field_query("variant", variant)
+    assert "id" in query
+    assert "legacyResourceId" in query
+
+
 def test_config_schema_exposes_optional_location_ids_string_array():
     location_ids = TapshopifyBeta.config_jsonschema["properties"]["location_ids"]
 
